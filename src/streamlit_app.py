@@ -35,7 +35,7 @@ st.markdown("---")
 st.subheader("📊 Recently Uploaded Meals")
 
 # Function to fetch rows
-def fetch_latest_rows(limit=10):
+def fetch_latest_rows():
     try:
         conn = pymysql.connect(
             host=RDS_HOST,
@@ -47,7 +47,7 @@ def fetch_latest_rows(limit=10):
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, image_name, food_name, calories, fat, protein, carbs, upload_time "
-                "FROM food_info ORDER BY upload_time DESC LIMIT %s", (limit,)
+                "FROM food_info ORDER BY upload_time DESC"
             )
             rows = cur.fetchall()
             return rows
@@ -135,7 +135,7 @@ highlight_color = "#FF5733"
 default_color = "#1f77b4"
 
 bar_chart = alt.Chart(cal_df).mark_bar().encode(
-    x=alt.X("Food Name:N", sort="-y", title="Food Name", axis=alt.Axis(labelAngle=0)),
+    x=alt.X("Food Name:N", sort="-y", title="Food Name", axis=alt.Axis(labelAngle=45)),
     y=alt.Y("Calories (kcal):Q", title="Total Calories (kcal)"),
     color=alt.condition(
         alt.datum.Highlight == "Top 3",
@@ -191,6 +191,140 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+st.subheader("🧮 Calorie Calculator")
+
+# Personal Information Section
+st.markdown("### 📏 Personal Information")
+col1, col2 = st.columns(2)
+with col1:
+    height = st.number_input("Height (cm)", min_value=100, max_value=250, value=170, step=1)
+with col2:
+    weight = st.number_input("Weight (kg)", min_value=30, max_value=200, value=60, step=1)
+
+# Activity Level Selection
+activity_level = st.selectbox(
+    "Activity Level",
+    ["Sedentary (little or no exercise)",
+     "Lightly active (1-3 days/week)",
+     "Moderately active (3-5 days/week)",
+     "Very active (6-7 days/week)",
+     "Extra active (very active + physical job)"]
+)
+
+# Calculate BMR and TDEE
+def calculate_bmr(height, weight):
+    # Using Mifflin-St Jeor Equation
+    return 10 * weight + 6.25 * height - 5
+
+def calculate_tdee(bmr, activity_level):
+    activity_multipliers = {
+        "Sedentary (little or no exercise)": 1.2,
+        "Lightly active (1-3 days/week)": 1.375,
+        "Moderately active (3-5 days/week)": 1.55,
+        "Very active (6-7 days/week)": 1.725,
+        "Extra active (very active + physical job)": 1.9
+    }
+    return bmr * activity_multipliers[activity_level]
+
+bmr = calculate_bmr(height, weight)
+tdee = calculate_tdee(bmr, activity_level)
+
+# Display recommended calories
+st.markdown("### 💡 Recommended Daily Calorie Intake")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("BMR", f"{bmr:.0f} kcal")
+with col2:
+    st.metric("TDEE", f"{tdee:.0f} kcal")
+with col3:
+    st.metric("Weight Loss (500 kcal deficit)", f"{tdee-500:.0f} kcal")
+
+# Food Selection and Calculation
+st.markdown("### 🍽️ Daily Food Log")
+
+# Initialize session state for food log if not exists
+if 'food_log' not in st.session_state:
+    st.session_state.food_log = []
+
+# Food Selection Section
+st.markdown("#### Add New Food")
+food_names = df["Food Name"].unique().tolist() if not df.empty else []
+col1, col2 = st.columns(2)
+with col1:
+    selected_food = st.selectbox("Select Food", food_names)
+with col2:
+    weight = st.number_input("Serving Size (g)", min_value=1, value=100, step=1)
+
+# Add to log button
+if st.button("➕ Add to Daily Log"):
+    if selected_food:
+        food_info = df[df["Food Name"] == selected_food].iloc[0]
+        # Calculate nutrition for the serving
+        total_calories = (food_info['Calories (kcal)'] * weight) / 100
+        total_protein = (food_info['Protein (g)'] * weight) / 100
+        total_fat = (food_info['Fat (g)'] * weight) / 100
+        total_carbs = (food_info['Carbs (g)'] * weight) / 100
+        
+        # Add to food log
+        st.session_state.food_log.append({
+            'food': selected_food,
+            'weight': weight,
+            'calories': total_calories,
+            'protein': total_protein,
+            'fat': total_fat,
+            'carbs': total_carbs
+        })
+        st.success(f"Added {selected_food} ({weight}g) to your daily log!")
+
+# Display Daily Log
+st.markdown("#### 📋 Today's Food Log")
+if st.session_state.food_log:
+    # Create DataFrame from food log
+    log_df = pd.DataFrame(st.session_state.food_log)
+    
+    # Display food log table
+    st.dataframe(log_df[['food', 'weight', 'calories', 'protein', 'fat', 'carbs']].rename(columns={
+        'food': 'Food',
+        'weight': 'Weight (g)',
+        'calories': 'Calories (kcal)',
+        'protein': 'Protein (g)',
+        'fat': 'Fat (g)',
+        'carbs': 'Carbs (g)'
+    }), use_container_width=True)
+    
+    # Calculate totals
+    total_calories = log_df['calories'].sum()
+    total_protein = log_df['protein'].sum()
+    total_fat = log_df['fat'].sum()
+    total_carbs = log_df['carbs'].sum()
+    
+    # Display totals
+    st.markdown("#### 📊 Daily Totals")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Calories", f"{total_calories:.1f} kcal", f"{((total_calories/tdee)*100):.1f}% of TDEE")
+    with col2:
+        st.metric("Total Protein", f"{total_protein:.1f} g")
+    with col3:
+        st.metric("Total Fat", f"{total_fat:.1f} g")
+    with col4:
+        st.metric("Total Carbs", f"{total_carbs:.1f} g")
+    
+    # Progress bar for daily calories
+    st.markdown("**Daily Calorie Progress**")
+    st.progress(min(total_calories / tdee, 1))
+    
+    # Clear log button
+    if st.button("🗑️ Clear Daily Log"):
+        st.session_state.food_log = []
+        st.rerun()
+else:
+    st.info("No foods logged yet. Add some foods to your daily log!")
+
+# Add some spacing
+st.markdown("---")
 
 
 
