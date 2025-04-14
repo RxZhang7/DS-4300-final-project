@@ -2,12 +2,15 @@ import streamlit as st
 import pymysql
 import pandas as pd
 from s3_uploader import upload_image_to_s3
+import os
+from dotenv import load_dotenv
 
-# RDS settings
-RDS_HOST = "host"
-RDS_USER = "admin"
-RDS_PASSWORD = "master_passward"
-RDS_DB = "nutritiondb"
+load_dotenv()
+
+RDS_HOST = os.getenv("RDS_HOST")
+RDS_USER = os.getenv("RDS_USER")
+RDS_PASSWORD = os.getenv("RDS_PASSWORD")
+RDS_DB = os.getenv("RDS_DB")
 
 st.title("🍽️ HealthSnap - Upload Your Meal Photo")
 
