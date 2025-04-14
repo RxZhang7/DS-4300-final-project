@@ -1,6 +1,8 @@
 import streamlit as st
 import pymysql
 import pandas as pd
+import altair as alt
+import plotly.graph_objects as go
 from s3_uploader import upload_image_to_s3
 import os
 from dotenv import load_dotenv
@@ -114,6 +116,93 @@ if data:
 
 else:
     st.info("No records yet. Upload an image to get started.")
+
+
+
+st.markdown("---")
+st.subheader("📊 Nutrition Analytics")
+
+# Bar Chart with Altair
+st.markdown("#### 🔥 Total Calories by Food")
+
+# aggregated calorie data
+cal_df = df.groupby("Food Name")["Calories (kcal)"].sum().reset_index()
+cal_df = cal_df.sort_values(by="Calories (kcal)", ascending=False).reset_index(drop=True)
+cal_df["Rank"] = cal_df.index + 1
+cal_df["Highlight"] = cal_df["Rank"].apply(lambda x: "Top 3" if x <= 3 else "Other")
+
+highlight_color = "#FF5733"
+default_color = "#1f77b4"
+
+bar_chart = alt.Chart(cal_df).mark_bar().encode(
+    x=alt.X("Food Name:N", sort="-y", title="Food Name", axis=alt.Axis(labelAngle=0)),
+    y=alt.Y("Calories (kcal):Q", title="Total Calories (kcal)"),
+    color=alt.condition(
+        alt.datum.Highlight == "Top 3",
+        alt.value(highlight_color),
+        alt.value(default_color)
+    ),
+    tooltip=["Food Name", "Calories (kcal)"]
+).properties(width=700, height=400)
+
+st.altair_chart(bar_chart, use_container_width=True)
+
+
+# Pie Chart
+st.markdown("### 🥜 Macronutrient Breakdown")
+
+# Dropdown to select record
+record_options = df.apply(lambda row: f"{row['Food Name']} @ {row['Upload Time']}", axis=1)
+selected_label = st.selectbox("Choose an upload to inspect:", record_options)
+
+# Get selected row
+selected_row = df.loc[record_options == selected_label].iloc[0]
+
+labels = ["Fat", "Protein", "Carbs"]
+values = [selected_row["Fat (g)"], selected_row["Protein (g)"], selected_row["Carbs (g)"]]
+colors = ["#1f77b4", "#aec7e8", "#ff4b4b"]
+
+st.markdown(f"**{selected_row['Food Name']} uploaded at {selected_row['Upload Time']}**")
+
+fig = go.Figure(
+    data=[
+        go.Pie(
+            labels=labels,
+            values=values,
+            marker=dict(colors=colors),
+            hoverinfo='label+percent+value',
+            textinfo='none',
+            showlegend=True
+        )
+    ]
+)
+
+fig.update_layout(
+    height=400,
+    width=500,
+    margin=dict(t=20, b=20, l=0, r=0),
+    legend=dict(
+        orientation="v",
+        yanchor="middle",
+        y=0.5,
+        xanchor="right",
+        x=1.05
+    )
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
