@@ -132,7 +132,7 @@ if data:
 
     if st.session_state.edit_mode:
         st.markdown("### Edit Uploaded Meals")
-        
+
         selected_ids = []
         for i, row in df.iterrows():
             col1, col2 = st.columns([5, 1])
@@ -141,7 +141,7 @@ if data:
             with col2:
                 if st.button("🗑️", key=f"delete_meal_{i}"):
                     selected_ids.append(int(row["ID"]))
-        
+
         if selected_ids:
             delete_rows_by_ids(selected_ids)
             st.success("✅ Selected meals deleted!")

@@ -78,64 +78,8 @@ def detect_food_in_image(bucket, key):
         print(f"❌ Error detecting labels: {e}")
         return []
 
-def get_nutrition_from_usda(food_name):
-    """Get nutrition information from USDA Food Database"""
-    try:
-        # Search for food in USDA database
-        search_url = f"{USDA_API_URL}/foods/search"
-        params = {
-            "api_key": USDA_API_KEY,
-            "query": food_name,
-            "dataType": ["Survey (FNDDS)"],  # Use FNDDS for standard portions
-            "pageSize": 1
-        }
-        
-        response = requests.get(search_url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        
-        if not data.get('foods'):
-            print(f"❌ No USDA data found for: {food_name}")
-            return None
-            
-        food = data['foods'][0]
-        nutrients = food.get('foodNutrients', [])
-        
-        # Extract nutrition information
-        nutrition = {
-            "food_name": food['description'].title(),
-            "calories": 0,
-            "protein": 0,
-            "carbs": 0,
-            "fat": 0
-        }
-        
-        # Map USDA nutrient IDs to our fields
-        nutrient_map = {
-            "calories": [1008, 2047, 2048],  # Energy in kcal
-            "protein": [1003],               # Protein
-            "carbs": [1005, 2000],          # Carbohydrates
-            "fat": [1004]                    # Total fat
-        }
-        
-        for nutrient in nutrients:
-            nutrient_id = nutrient.get('nutrientId')
-            value = nutrient.get('value', 0)
-            
-            for key, ids in nutrient_map.items():
-                if nutrient_id in ids:
-                    nutrition[key] = round(value, 1)
-                    break
-        
-        print(f"✅ Found USDA data for: {nutrition['food_name']}")
-        return nutrition
-        
-    except Exception as e:
-        print(f"❌ USDA API error: {e}")
-        return None
-
 def get_food_info(filename, detected_labels=None):
-    """Get food information from filename, image recognition, or USDA database"""
+    """Get food information from filename or image recognition only (no USDA API)"""
     # Clean filename
     name = filename.lower()
     name = ''.join(c for c in name if c.isalpha() or c.isspace())
@@ -160,16 +104,6 @@ def get_food_info(filename, detected_labels=None):
                 data = FOOD_DATA[label]
                 print(f"✅ Found food match from image recognition: {data['food_name']}")
                 return data
-            
-            # if label not in database, try USDA
-            usda_data = get_nutrition_from_usda(label)
-            if usda_data:
-                return usda_data
-    
-    # 3. finally, try USDA API
-    usda_data = get_nutrition_from_usda(name)
-    if usda_data:
-        return usda_data
     
     print("❌ No food match found")
     return {"food_name": "Unknown", "calories": 0, "protein": 0, "carbs": 0, "fat": 0}
