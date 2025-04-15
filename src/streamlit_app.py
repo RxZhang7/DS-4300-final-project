@@ -118,11 +118,15 @@ if data:
     if "edit_mode" not in st.session_state:
         st.session_state.edit_mode = False
 
+    # Recently Uploaded Meals edit button
     col1, col2 = st.columns([6, 1])
     with col1:
         st.write("")  # Empty space for alignment
     with col2:
-        if st.button("✏️ Edit" if not st.session_state.edit_mode else "Done"):
+        if st.button(
+            "✏️ Edit" if not st.session_state.edit_mode else "Done",
+            key="edit_uploaded_meals"  # Added unique key
+        ):
             st.session_state.edit_mode = not st.session_state.edit_mode
             st.rerun()
 
@@ -367,7 +371,10 @@ if st.session_state.food_log:
         }), use_container_width=True)
     
     with col2:
-        if st.button("✏️ Edit" if not st.session_state.food_log_edit_mode else "Done"):
+        if st.button(
+            "✏️ Edit" if not st.session_state.food_log_edit_mode else "Done",
+            key="edit_food_log"  # Added unique key
+        ):
             st.session_state.food_log_edit_mode = not st.session_state.food_log_edit_mode
             st.rerun()
     
