@@ -14,7 +14,7 @@ RDS_USER = os.getenv("RDS_USER")
 RDS_PASSWORD = os.getenv("RDS_PASSWORD")
 RDS_DB = os.getenv("RDS_DB")
 
-st.title("🍽️ HealthSnap - Upload Your Meal Photo")
+st.markdown("# 🍽️ HealthSnap\n## Upload Your Meal Photo")
 
 # Upload UI
 uploaded_file = st.file_uploader("Choose a meal image", type=["jpg", "jpeg", "png"])
@@ -348,7 +348,7 @@ if st.session_state.food_log:
     st.markdown("#### 📊 Daily Totals")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Calories", f"{total_calories:.1f} kcal", f"{((total_calories/tdee)*100):.1f}% of TDEE")
+        st.metric("Total Calories", f"{total_calories:.0f} kcal", f"{((total_calories/tdee)*100):.1f}% of TDEE")
     with col2:
         st.metric("Total Protein", f"{total_protein:.1f} g")
     with col3:
