@@ -86,8 +86,6 @@ DS-4300-final-project/
 │   ├── s3_uploader.py      # S3 upload functionality
 │   ├── food_data.py        # Food data dictionary
 │   ├── lambda_function.py  # AWS Lambda function
-│   ├── test_db.py         # Database testing
-│   └── test.py            # S3 testing
 ├── requirements.txt        # Project dependencies
 └── README.md              # Project documentation
 ```
@@ -99,8 +97,9 @@ DS-4300-final-project/
 - Filenames can serve as a backup recognition method
 
 ## Contributors
-- [Your Name]
-- [Other Contributors]
+- Rongxuan Zhang
+- Yanzhen Chen
+- Huy Le
 
 ## License
 This project is licensed under the MIT License
