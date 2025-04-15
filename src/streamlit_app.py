@@ -360,6 +360,49 @@ if st.session_state.food_log:
     st.markdown("**Daily Calorie Progress**")
     st.progress(min(total_calories / tdee, 1))
     
+    # NEW SECTION: Exercise Equivalents
+    st.markdown("#### 🏃‍♀️ Exercise Equivalents")
+    st.markdown("Time required to burn off today's calories:")
+    
+    # Define exercise burn rates (calories/hour) for a person of average weight (~70kg)
+    exercise_burn_rates = {
+        "Running (10 km/h)": 700,
+        "Biking (15 km/h)": 500,
+        "Weight lifting": 350,
+        "Swimming (moderate)": 600,
+        "Walking (5 km/h)": 280
+    }
+    
+    # Calculate and display exercise equivalents
+    exercise_cols = st.columns(len(exercise_burn_rates))
+    
+    for i, (exercise, burn_rate) in enumerate(exercise_burn_rates.items()):
+        # Calculate hours needed (calories ÷ burn rate)
+        hours = total_calories / burn_rate
+        
+        # Format time display
+        if hours < 1:
+            time_str = f"{int(hours * 60)} min"
+        else:
+            # Format as hours and minutes
+            hrs = int(hours)
+            mins = int((hours - hrs) * 60)
+            time_str = f"{hrs} hr{'' if hrs == 1 else 's'}"
+            if mins > 0:
+                time_str += f" {mins} min"
+        
+        # Display in columns with icons
+        with exercise_cols[i]:
+            exercise_icon = {
+                "Running (10 km/h)": "🏃",
+                "Biking (15 km/h)": "🚴",
+                "Weight lifting": "🏋️",
+                "Swimming (moderate)": "🏊",
+                "Walking (5 km/h)": "🚶"
+            }.get(exercise, "⚡")
+            
+            st.metric(f"{exercise_icon} {exercise}", time_str)
+    
     # Clear log button
     if st.button("🗑️ Clear Daily Log"):
         st.session_state.food_log = []
