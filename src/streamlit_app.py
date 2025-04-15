@@ -112,37 +112,45 @@ if data:
     for col in ["Calories (kcal)", "Fat (g)", "Protein (g)", "Carbs (g)"]:
         df[col] = df[col].apply(lambda x: int(x) if x == int(x) else round(x, 1))
 
-
     # Editable table
     st.dataframe(df.drop(columns=["ID"]), use_container_width=True)
 
     if "edit_mode" not in st.session_state:
         st.session_state.edit_mode = False
 
-    if st.button("📝 Edit"):
-        st.session_state.edit_mode = True
+    # Recently Uploaded Meals edit button
+    col1, col2 = st.columns([6, 1])
+    with col1:
+        st.write("")  # Empty space for alignment
+    with col2:
+        if st.button(
+            "✏️ Edit" if not st.session_state.edit_mode else "Done",
+            key="edit_uploaded_meals"  # Added unique key
+        ):
+            st.session_state.edit_mode = not st.session_state.edit_mode
+            st.rerun()
 
     if st.session_state.edit_mode:
-        st.markdown("### ✅ Select rows to delete")
-
+        st.markdown("### Edit Uploaded Meals")
+        
         selected_ids = []
         for i, row in df.iterrows():
-            if st.checkbox(f"Delete row with image: {row['Image Name']}, time: {row['Upload Time']}", key=f"row_{i}"):
-                selected_ids.append(int(row["ID"]))
-
-        if st.button("💾 Save Changes"):
-            if selected_ids:
-                delete_rows_by_ids(selected_ids)
-                st.success("✅ Selected rows deleted!")
-                st.rerun()
-            else:
-                st.warning("⚠️ No rows selected.")
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.text(f"{row['Food Name']} ({row['Upload Time']})")
+            with col2:
+                if st.button("🗑️", key=f"delete_meal_{i}"):
+                    selected_ids.append(int(row["ID"]))
+        
+        if selected_ids:
+            delete_rows_by_ids(selected_ids)
+            st.success("✅ Selected meals deleted!")
+            st.rerun()
 
 else:
     st.info("No records yet. Upload an image to get started.")
 
-
-
+# Add some spacing
 st.markdown("---")
 st.subheader("📊 Nutrition Analytics")
 
@@ -257,6 +265,23 @@ activity_level = st.selectbox(
      "Extra active (very active + physical job)"]
 )
 
+# Weight Loss Goal
+col1, col2 = st.columns(2)
+with col1:
+    weight_loss_goal = st.selectbox(
+        "Weight Loss Goal",
+        ["Maintain Weight", "Slow Weight Loss", "Moderate Weight Loss", "Fast Weight Loss"]
+    )
+
+# Map weight loss goals to calorie deficits
+deficit_map = {
+    "Maintain Weight": 0,
+    "Slow Weight Loss": 250,
+    "Moderate Weight Loss": 500,
+    "Fast Weight Loss": 750
+}
+calorie_deficit = deficit_map[weight_loss_goal]
+
 # Calculate BMR and TDEE
 def calculate_bmr(height, weight):
     # Using Mifflin-St Jeor Equation
@@ -283,7 +308,8 @@ with col1:
 with col2:
     st.metric("TDEE", f"{tdee:.0f} kcal")
 with col3:
-    st.metric("Weight Loss (500 kcal deficit)", f"{tdee-500:.0f} kcal")
+    target_calories = tdee - calorie_deficit
+    st.metric(f"Weight Loss ({calorie_deficit} kcal deficit)", f"{target_calories:.0f} kcal")
 
 # Food Selection and Calculation
 st.markdown("### 🍽️ Daily Food Log")
@@ -325,18 +351,66 @@ if st.button("➕ Add to Daily Log"):
 # Display Daily Log
 st.markdown("#### 📋 Today's Food Log")
 if st.session_state.food_log:
-    # Create DataFrame from food log
-    log_df = pd.DataFrame(st.session_state.food_log)
+    # Add edit mode toggle
+    if 'food_log_edit_mode' not in st.session_state:
+        st.session_state.food_log_edit_mode = False
+        
+    col1, col2 = st.columns([6, 1])
+    with col1:
+        # Create DataFrame from food log
+        log_df = pd.DataFrame(st.session_state.food_log)
+        
+        # Display food log table
+        st.dataframe(log_df[['food', 'weight', 'calories', 'protein', 'fat', 'carbs']].rename(columns={
+            'food': 'Food',
+            'weight': 'Weight (g)',
+            'calories': 'Calories (kcal)',
+            'protein': 'Protein (g)',
+            'fat': 'Fat (g)',
+            'carbs': 'Carbs (g)'
+        }), use_container_width=True)
     
-    # Display food log table
-    st.dataframe(log_df[['food', 'weight', 'calories', 'protein', 'fat', 'carbs']].rename(columns={
-        'food': 'Food',
-        'weight': 'Weight (g)',
-        'calories': 'Calories (kcal)',
-        'protein': 'Protein (g)',
-        'fat': 'Fat (g)',
-        'carbs': 'Carbs (g)'
-    }), use_container_width=True)
+    with col2:
+        if st.button(
+            "✏️ Edit" if not st.session_state.food_log_edit_mode else "Done",
+            key="edit_food_log"  # Added unique key
+        ):
+            st.session_state.food_log_edit_mode = not st.session_state.food_log_edit_mode
+            st.rerun()
+    
+    # Show edit interface if in edit mode
+    if st.session_state.food_log_edit_mode:
+        st.markdown("### Edit Food Log")
+        items_to_remove = []
+        
+        for idx, item in enumerate(st.session_state.food_log):
+            col1, col2, col3 = st.columns([4, 2, 1])
+            with col1:
+                st.text(f"{item['food']}")
+            with col2:
+                new_weight = st.number_input(
+                    "Weight (g)", 
+                    value=float(item['weight']), 
+                    min_value=1.0, 
+                    key=f"weight_{idx}"
+                )
+                # Update weight and recalculate nutrition
+                if new_weight != item['weight']:
+                    ratio = new_weight / item['weight']
+                    st.session_state.food_log[idx]['weight'] = new_weight
+                    st.session_state.food_log[idx]['calories'] *= ratio
+                    st.session_state.food_log[idx]['protein'] *= ratio
+                    st.session_state.food_log[idx]['fat'] *= ratio
+                    st.session_state.food_log[idx]['carbs'] *= ratio
+            with col3:
+                if st.button("🗑️", key=f"delete_{idx}"):
+                    items_to_remove.append(idx)
+        
+        # Remove marked items
+        if items_to_remove:
+            for idx in sorted(items_to_remove, reverse=True):
+                st.session_state.food_log.pop(idx)
+            st.rerun()
     
     # Calculate totals
     total_calories = log_df['calories'].sum()
@@ -345,10 +419,25 @@ if st.session_state.food_log:
     total_carbs = log_df['carbs'].sum()
     
     # Display totals
-    st.markdown("#### 📊 Daily Totals")
+    st.markdown("#### 📊 Daily Nutrition Totals")
     col1, col2, col3, col4 = st.columns(4)
+    
+    # Calculate target calories (TDEE - deficit)
+    target_calories = tdee - calorie_deficit
+    calories_difference = total_calories - target_calories
+    
+    # Format the difference string
+    if calories_difference > 0:
+        difference_str = f"{calories_difference:.0f} kcal over target"
+        difference_color = "inverse"
+    else:
+        difference_str = f"{abs(calories_difference):.0f} kcal under target"
+        difference_color = "normal"
+    
     with col1:
-        st.metric("Total Calories", f"{total_calories:.0f} kcal", f"{((total_calories/tdee)*100):.1f}% of TDEE")
+        st.metric("Total Calories", f"{total_calories:.0f} kcal", 
+                 difference_str, 
+                 delta_color=difference_color)
     with col2:
         st.metric("Total Protein", f"{total_protein:.1f} g")
     with col3:
@@ -357,51 +446,103 @@ if st.session_state.food_log:
         st.metric("Total Carbs", f"{total_carbs:.1f} g")
     
     # Progress bar for daily calories
-    st.markdown("**Daily Calorie Progress**")
-    st.progress(min(total_calories / tdee, 1))
+    st.markdown(f"**Daily Calorie Progress (Target: {target_calories:.0f} kcal)**")
+    progress = total_calories / target_calories
+    st.progress(min(progress, 1.0))
     
-    # NEW SECTION: Exercise Equivalents
-    st.markdown("#### 🏃‍♀️ Exercise Equivalents")
-    st.markdown("Time required to burn off today's calories:")
+    # NEW SECTION: Exercise Recommendations
+    st.markdown("#### 🏃‍♀️ Exercise Recommendations")
     
-    # Define exercise burn rates (calories/hour) for a person of average weight (~70kg)
-    exercise_burn_rates = {
-        "Running (10 km/h)": 700,
-        "Biking (15 km/h)": 500,
-        "Weight lifting": 350,
-        "Swimming (moderate)": 600,
-        "Walking (5 km/h)": 280
-    }
+    # Add custom CSS for exercise display
+    st.markdown("""
+        <style>
+        .exercise-container {
+            text-align: center;
+            padding: 1rem;
+            width: 100%;
+        }
+        .exercise-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .exercise-name {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+            min-height: 3.5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            flex-direction: column;
+            line-height: 1.2;
+        }
+        .exercise-time {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 0;
+            min-height: 2.5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            flex-direction: column;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    # Calculate and display exercise equivalents
-    exercise_cols = st.columns(len(exercise_burn_rates))
-    
-    for i, (exercise, burn_rate) in enumerate(exercise_burn_rates.items()):
-        # Calculate hours needed (calories ÷ burn rate)
-        hours = total_calories / burn_rate
+    if calories_difference > 0:
+        st.markdown(f"To reach your daily goal, you need to burn **{calories_difference:.0f}** excess calories")
         
-        # Format time display
-        if hours < 1:
-            time_str = f"{int(hours * 60)} min"
-        else:
-            # Format as hours and minutes
-            hrs = int(hours)
-            mins = int((hours - hrs) * 60)
-            time_str = f"{hrs} hr{'' if hrs == 1 else 's'}"
-            if mins > 0:
-                time_str += f" {mins} min"
+        # Define exercise burn rates (calories/hour) for a person of average weight (~70kg)
+        exercise_burn_rates = {
+            "Running\n(10 km/h)": 700,
+            "Biking\n(15 km/h)": 500,
+            "Weight\nLifting": 350,
+            "Swimming\n(moderate)": 600,
+            "Walking\n(5 km/h)": 280
+        }
         
-        # Display in columns with icons
-        with exercise_cols[i]:
-            exercise_icon = {
-                "Running (10 km/h)": "🏃",
-                "Biking (15 km/h)": "🚴",
-                "Weight lifting": "🏋️",
-                "Swimming (moderate)": "🏊",
-                "Walking (5 km/h)": "🚶"
-            }.get(exercise, "⚡")
+        # Create a container for better spacing
+        with st.container():
+            # Use columns for layout with more space between them
+            cols = st.columns(5, gap="large")
             
-            st.metric(f"{exercise_icon} {exercise}", time_str)
+            # Exercise icons
+            icons = {
+                "Running\n(10 km/h)": "🏃",
+                "Biking\n(15 km/h)": "🚴",
+                "Weight\nLifting": "🏋️",
+                "Swimming\n(moderate)": "🏊",
+                "Walking\n(5 km/h)": "🚶"
+            }
+            
+            for i, (exercise, burn_rate) in enumerate(exercise_burn_rates.items()):
+                # Calculate hours needed
+                hours = calories_difference / burn_rate
+                
+                # Format time display with line break
+                if hours < 1:
+                    time_str = f"{int(hours * 60)}\nmin"
+                else:
+                    hrs = int(hours)
+                    mins = int((hours - hrs) * 60)
+                    if mins > 0:
+                        time_str = f"{hrs} hrs\n{mins} min"
+                    else:
+                        time_str = f"{hrs}\nhrs"
+                
+                # Display in columns with custom layout
+                with cols[i]:
+                    st.markdown(f"""
+                        <div class="exercise-container">
+                            <div class="exercise-icon">{icons[exercise]}</div>
+                            <div class="exercise-name">{exercise.replace('\\n', '<br>')}</div>
+                            <div class="exercise-time">{time_str.replace('\\n', '<br>')}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+    else:
+        st.success(f"👏 Great job! You're under your calorie target by {abs(calories_difference):.0f} kcal. Keep it up!")
     
     # Clear log button
     if st.button("🗑️ Clear Daily Log"):
