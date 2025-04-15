@@ -3,6 +3,9 @@ import os
 from dotenv import load_dotenv
 import pymysql
 from datetime import datetime
+import requests
+import json
+from food_data import FOOD_DATA
 
 load_dotenv()
 
@@ -18,41 +21,11 @@ RDS_USER = os.getenv("RDS_USER")
 RDS_PASSWORD = os.getenv("RDS_PASSWORD")
 RDS_DB = os.getenv("RDS_DB")
 
-# Food data dictionary
-FOOD_DATA = {
-    "potato":      {"food_name": "Potato",      "calories": 130,  "protein": 3,   "carbs": 30,  "fat": 0},
-    "rice":        {"food_name": "Rice",        "calories": 200,  "protein": 4,   "carbs": 45,  "fat": 1},
-    "burger":      {"food_name": "Burger",      "calories": 350,  "protein": 20,  "carbs": 33,  "fat": 18},
-    "apple":       {"food_name": "Apple",       "calories": 95,   "protein": 0.5, "carbs": 25,  "fat": 0.3},
-    "banana":      {"food_name": "Banana",      "calories": 105,  "protein": 1.3, "carbs": 27,  "fat": 0.3},
-    "orange":      {"food_name": "Orange",      "calories": 62,   "protein": 1.2, "carbs": 15.4,"fat": 0.2},
-    "chicken":     {"food_name": "Chicken",     "calories": 239,  "protein": 27,  "carbs": 0,   "fat": 14},
-    "beef":        {"food_name": "Beef",        "calories": 250,  "protein": 26,  "carbs": 0,   "fat": 17},
-    "salmon":      {"food_name": "Salmon",      "calories": 208,  "protein": 20,  "carbs": 0,   "fat": 13},
-    "egg":         {"food_name": "Egg",         "calories": 78,   "protein": 6,   "carbs": 0.6, "fat": 5},
-    "bread":       {"food_name": "Bread",       "calories": 80,   "protein": 3,   "carbs": 15,  "fat": 1},
-    "pizza":       {"food_name": "Pizza",       "calories": 285,  "protein": 12,  "carbs": 36,  "fat": 10},
-    "cheese":      {"food_name": "Cheese",      "calories": 113,  "protein": 7,   "carbs": 1,   "fat": 9},
-    "carrot":      {"food_name": "Carrot",      "calories": 41,   "protein": 0.9, "carbs": 10,  "fat": 0.2},
-    "broccoli":    {"food_name": "Broccoli",    "calories": 55,   "protein": 3.7, "carbs": 11,  "fat": 0.6},
-    "cucumber":    {"food_name": "Cucumber",    "calories": 16,   "protein": 0.7, "carbs": 4,   "fat": 0.1},
-    "lettuce":     {"food_name": "Lettuce",     "calories": 15,   "protein": 1.4, "carbs": 2.9, "fat": 0.2},
-    "avocado":     {"food_name": "Avocado",     "calories": 160,  "protein": 2,   "carbs": 9,   "fat": 15},
-    "grapes":      {"food_name": "Grapes",      "calories": 62,   "protein": 0.6, "carbs": 16,  "fat": 0.3},
-    "yogurt":      {"food_name": "Yogurt",      "calories": 59,   "protein": 10,  "carbs": 3.6, "fat": 0.4},
-    "oatmeal":     {"food_name": "Oatmeal",     "calories": 150,  "protein": 5,   "carbs": 27,  "fat": 3},
-    "pasta":       {"food_name": "Pasta",       "calories": 131,  "protein": 5,   "carbs": 25,  "fat": 1.1},
-    "tofu":        {"food_name": "Tofu",        "calories": 76,   "protein": 8,   "carbs": 1.9, "fat": 4.8},
-    "shrimp":      {"food_name": "Shrimp",      "calories": 99,   "protein": 24,  "carbs": 0.2, "fat": 0.3},
-    "steak":       {"food_name": "Steak",       "calories": 271,  "protein": 25,  "carbs": 0,   "fat": 19},
-    "milk":        {"food_name": "Milk",        "calories": 103,  "protein": 8,   "carbs": 12,  "fat": 2.4},
-    "icecream":    {"food_name": "Ice Cream",   "calories": 137,  "protein": 2.3, "carbs": 16,  "fat": 7},
-    "sandwich":    {"food_name": "Sandwich",    "calories": 250,  "protein": 12,  "carbs": 30,  "fat": 10},
-    "cereal":      {"food_name": "Cereal",      "calories": 110,  "protein": 2,   "carbs": 24,  "fat": 1},
-    "fries":       {"food_name": "Fries",       "calories": 312,  "protein": 3.4, "carbs": 41,  "fat": 15}
-}
+# USDA API credentials
+USDA_API_KEY = os.getenv("USDA_API_KEY", "DEMO_KEY")  # Use DEMO_KEY if not set
+USDA_API_URL = "https://api.nal.usda.gov/fdc/v1"
 
-# Initialize S3 client with credentials
+# Initialize AWS clients
 s3 = boto3.client(
     "s3",
     aws_access_key_id=aws_access_key,
@@ -60,29 +33,144 @@ s3 = boto3.client(
     region_name=aws_region
 )
 
-def get_food_info(filename):
-    """Get food information from filename"""
-    # Remove file extension and convert to lowercase
+rekognition = boto3.client(
+    "rekognition",
+    aws_access_key_id=aws_access_key,
+    aws_secret_access_key=aws_secret_key,
+    region_name=aws_region
+)
+
+def detect_food_in_image(bucket, key):
+    """Detect food items in the image using AWS Rekognition"""
+    try:
+        # Check if we have Rekognition permissions first
+        try:
+            response = rekognition.detect_labels(
+                Image={
+                    'S3Object': {
+                        'Bucket': bucket,
+                        'Name': key
+                    }
+                },
+                MaxLabels=10,
+                MinConfidence=70
+            )
+        except Exception as e:
+            if "AccessDeniedException" in str(e):
+                print("⚠️ Rekognition access not available, falling back to filename matching")
+                return []
+            raise e
+
+        # Extract food-related labels
+        food_labels = []
+        for label in response['Labels']:
+            if label['Confidence'] > 70:  # Only consider labels with high confidence
+                name = label['Name'].lower()
+                # Check if the label matches any food in our database
+                for food_key in FOOD_DATA.keys():
+                    if food_key in name or name in food_key:
+                        food_labels.append(food_key)
+                        break
+        
+        print(f"🔍 Detected labels: {food_labels}")
+        return food_labels
+    except Exception as e:
+        print(f"❌ Error detecting labels: {e}")
+        return []
+
+def get_nutrition_from_usda(food_name):
+    """Get nutrition information from USDA Food Database"""
+    try:
+        # Search for food in USDA database
+        search_url = f"{USDA_API_URL}/foods/search"
+        params = {
+            "api_key": USDA_API_KEY,
+            "query": food_name,
+            "dataType": ["Survey (FNDDS)"],  # Use FNDDS for standard portions
+            "pageSize": 1
+        }
+        
+        response = requests.get(search_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if not data.get('foods'):
+            print(f"❌ No USDA data found for: {food_name}")
+            return None
+            
+        food = data['foods'][0]
+        nutrients = food.get('foodNutrients', [])
+        
+        # Extract nutrition information
+        nutrition = {
+            "food_name": food['description'].title(),
+            "calories": 0,
+            "protein": 0,
+            "carbs": 0,
+            "fat": 0
+        }
+        
+        # Map USDA nutrient IDs to our fields
+        nutrient_map = {
+            "calories": [1008, 2047, 2048],  # Energy in kcal
+            "protein": [1003],               # Protein
+            "carbs": [1005, 2000],          # Carbohydrates
+            "fat": [1004]                    # Total fat
+        }
+        
+        for nutrient in nutrients:
+            nutrient_id = nutrient.get('nutrientId')
+            value = nutrient.get('value', 0)
+            
+            for key, ids in nutrient_map.items():
+                if nutrient_id in ids:
+                    nutrition[key] = round(value, 1)
+                    break
+        
+        print(f"✅ Found USDA data for: {nutrition['food_name']}")
+        return nutrition
+        
+    except Exception as e:
+        print(f"❌ USDA API error: {e}")
+        return None
+
+def get_food_info(filename, detected_labels=None):
+    """Get food information from filename, image recognition, or USDA database"""
+    # Clean filename
     name = filename.lower()
-    # Remove numbers and special characters
     name = ''.join(c for c in name if c.isalpha() or c.isspace())
     
-    # Try to find the longest matching food name
-    best_match = None
-    max_length = 0
-    
+    # 1. first try to find matches from filename
+    filename_matches = []
     for keyword, data in FOOD_DATA.items():
-        # If the keyword is found in the cleaned filename
         if keyword in name:
-            # Keep track of the longest matching keyword
-            if len(keyword) > max_length:
-                max_length = len(keyword)
-                best_match = data
+            filename_matches.append((keyword, len(keyword), data))
     
-    if best_match:
-        print(f"✅ Found food match: {best_match['food_name']}")
+    # if found filename matches, use the longest one
+    if filename_matches:
+        filename_matches.sort(key=lambda x: x[1], reverse=True)
+        best_match = filename_matches[0][2]
+        print(f"✅ Found food match from filename: {best_match['food_name']}")
         return best_match
-        
+    
+    # 2. if no filename matches, try image recognition results
+    if detected_labels:
+        for label in detected_labels:
+            if label in FOOD_DATA:
+                data = FOOD_DATA[label]
+                print(f"✅ Found food match from image recognition: {data['food_name']}")
+                return data
+            
+            # if label not in database, try USDA
+            usda_data = get_nutrition_from_usda(label)
+            if usda_data:
+                return usda_data
+    
+    # 3. finally, try USDA API
+    usda_data = get_nutrition_from_usda(name)
+    if usda_data:
+        return usda_data
+    
     print("❌ No food match found")
     return {"food_name": "Unknown", "calories": 0, "protein": 0, "carbs": 0, "fat": 0}
 
@@ -122,14 +210,24 @@ def insert_to_rds(image_name, food_info):
             conn.close()
 
 def upload_image_to_s3(file_obj, filename):
-    """Upload image to S3 and save info to RDS"""
+    """Upload image to S3, perform recognition, and save info to RDS"""
     try:
         # Upload to S3
-        s3.upload_fileobj(file_obj, bucket_name, f"uploads/{filename}")
+        s3_key = f"uploads/{filename}"
+        s3.upload_fileobj(file_obj, bucket_name, s3_key)
         print("✅ Successfully uploaded to S3")
         
-        # Get food info and save to RDS
-        food_info = get_food_info(filename)
+        try:
+            # Attempt image recognition
+            detected_labels = detect_food_in_image(bucket_name, s3_key)
+        except Exception as e:
+            print(f"⚠️ Image recognition failed, falling back to filename matching: {e}")
+            detected_labels = []
+        
+        # Get food info using both filename and detected labels
+        food_info = get_food_info(filename, detected_labels)
+        
+        # Save to RDS
         if insert_to_rds(filename, food_info):
             return True
         return False

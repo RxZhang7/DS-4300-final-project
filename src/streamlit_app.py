@@ -23,7 +23,7 @@ if uploaded_file:
     st.image(uploaded_file, caption="Preview", use_column_width=True)
 
     if st.button("Upload to S3"):
-        with st.spinner("Uploading image..."):
+        with st.spinner("Uploading and analyzing image..."):
             try:
                 # Check if filename contains a valid food name
                 filename = uploaded_file.name.lower()
@@ -32,15 +32,22 @@ if uploaded_file:
                              "lettuce", "avocado", "grapes", "yogurt", "oatmeal", "pasta", 
                              "tofu", "shrimp", "steak", "milk", "icecream", "sandwich", 
                              "cereal", "fries", "potato", "rice", "burger"]
+
+                st.info("""
+                🔍 Image Recognition Enabled!
+                The system will:
+                1. Analyze your image using AI
+                2. Try to identify the food in the picture
+                3. Use filename as backup if needed
                 
-                if not any(food in filename for food in valid_foods):
-                    st.warning("⚠️ Please ensure the filename contains a food name (e.g., apple.jpg, beef.jpg)")
-                    st.info("Supported food names: " + ", ".join(valid_foods))
-                    st.stop()
+                For best results, you can:
+                - Upload a clear photo of the food
+                - Name your file after the food (e.g., apple.jpg)
+                - Ensure the food is one of: """ + ", ".join(valid_foods))
 
                 success = upload_image_to_s3(uploaded_file, uploaded_file.name)
                 if success:
-                    st.success("✅ Image successfully uploaded!")
+                    st.success("✅ Image uploaded and analyzed successfully!")
                     st.rerun()
                 else:
                     st.error("❌ Upload failed. Check console for details.")
@@ -140,27 +147,47 @@ st.markdown("---")
 st.subheader("📊 Nutrition Analytics")
 
 # Bar Chart with Altair
-st.markdown("#### 🔥 Total Calories by Food")
+st.markdown("#### 🔥 Calories by Food Type")
 
-# aggregated calorie data
-cal_df = df.groupby("Food Name")["Calories (kcal)"].sum().reset_index()
-cal_df = cal_df.sort_values(by="Calories (kcal)", ascending=False).reset_index(drop=True)
+# Get the latest record for each food type
+cal_df = df.sort_values("Upload Time").drop_duplicates("Food Name", keep="last")
+cal_df = cal_df.sort_values(by="Calories (kcal)", ascending=True).reset_index(drop=True)  # Sort in ascending order
 cal_df["Rank"] = cal_df.index + 1
-cal_df["Highlight"] = cal_df["Rank"].apply(lambda x: "Top 3" if x <= 3 else "Other")
+cal_df["Highlight"] = cal_df["Rank"].apply(lambda x: "Top 3" if x >= len(cal_df) - 2 else "Other")  # Update highlight logic
 
 highlight_color = "#FF5733"
 default_color = "#1f77b4"
 
+# Configure horizontal bar chart
 bar_chart = alt.Chart(cal_df).mark_bar().encode(
-    x=alt.X("Food Name:N", sort="-y", title="Food Name", axis=alt.Axis(labelAngle=45)),
-    y=alt.Y("Calories (kcal):Q", title="Total Calories (kcal)"),
+    y=alt.Y(
+        "Food Name:N", 
+        sort="-x",  # Sort by calorie value
+        title=None,  # Remove Y-axis title
+        axis=alt.Axis(
+            labelLimit=200,  # Increase label length limit
+            labelFontSize=12  # Adjust font size
+        )
+    ),
+    x=alt.X(
+        "Calories (kcal):Q",
+        title="Calories (kcal)"
+    ),
     color=alt.condition(
         alt.datum.Highlight == "Top 3",
         alt.value(highlight_color),
         alt.value(default_color)
     ),
     tooltip=["Food Name", "Calories (kcal)"]
-).properties(width=700, height=400)
+).properties(
+    width=600,
+    height=max(len(cal_df) * 30, 400)  # Dynamically adjust height based on number of foods
+).configure_axis(
+    labelFontSize=12,
+    titleFontSize=13
+).configure_view(
+    strokeWidth=0  # Remove chart border
+)
 
 st.altair_chart(bar_chart, use_container_width=True)
 
