@@ -23,12 +23,29 @@ if uploaded_file:
     st.image(uploaded_file, caption="Preview", use_column_width=True)
 
     if st.button("Upload to S3"):
-        success = upload_image_to_s3(uploaded_file, uploaded_file.name)
-        if success:
-            st.success("✅ Image successfully uploaded to S3!")
-            st.info("⏳ Please wait a few seconds while data is inserted into RDS...")
-        else:
-            st.error("❌ Upload failed. Check console for details.")
+        with st.spinner("Uploading image..."):
+            try:
+                # Check if filename contains a valid food name
+                filename = uploaded_file.name.lower()
+                valid_foods = ["apple", "banana", "orange", "chicken", "beef", "salmon", "egg", 
+                             "bread", "pizza", "cheese", "carrot", "broccoli", "cucumber", 
+                             "lettuce", "avocado", "grapes", "yogurt", "oatmeal", "pasta", 
+                             "tofu", "shrimp", "steak", "milk", "icecream", "sandwich", 
+                             "cereal", "fries", "potato", "rice", "burger"]
+                
+                if not any(food in filename for food in valid_foods):
+                    st.warning("⚠️ Please ensure the filename contains a food name (e.g., apple.jpg, beef.jpg)")
+                    st.info("Supported food names: " + ", ".join(valid_foods))
+                    st.stop()
+
+                success = upload_image_to_s3(uploaded_file, uploaded_file.name)
+                if success:
+                    st.success("✅ Image successfully uploaded!")
+                    st.rerun()
+                else:
+                    st.error("❌ Upload failed. Check console for details.")
+            except Exception as e:
+                st.error(f"❌ An error occurred: {str(e)}")
 
 # Divider
 st.markdown("---")
@@ -325,7 +342,6 @@ else:
 
 # Add some spacing
 st.markdown("---")
-
 
 
 
