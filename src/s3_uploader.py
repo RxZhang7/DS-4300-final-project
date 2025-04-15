@@ -3,8 +3,6 @@ import os
 from dotenv import load_dotenv
 import pymysql
 from datetime import datetime
-import requests
-import json
 from food_data import FOOD_DATA
 
 load_dotenv()
@@ -20,10 +18,6 @@ RDS_HOST = os.getenv("RDS_HOST")
 RDS_USER = os.getenv("RDS_USER")
 RDS_PASSWORD = os.getenv("RDS_PASSWORD")
 RDS_DB = os.getenv("RDS_DB")
-
-# USDA API credentials
-USDA_API_KEY = os.getenv("USDA_API_KEY", "DEMO_KEY")  # Use DEMO_KEY if not set
-USDA_API_URL = "https://api.nal.usda.gov/fdc/v1"
 
 # Initialize AWS clients
 s3 = boto3.client(
