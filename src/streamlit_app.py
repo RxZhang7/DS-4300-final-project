@@ -132,7 +132,7 @@ if data:
 
     if st.session_state.edit_mode:
         st.markdown("### Edit Uploaded Meals")
-        
+
         selected_ids = []
         for i, row in df.iterrows():
             col1, col2 = st.columns([5, 1])
@@ -141,7 +141,7 @@ if data:
             with col2:
                 if st.button("🗑️", key=f"delete_meal_{i}"):
                     selected_ids.append(int(row["ID"]))
-        
+
         if selected_ids:
             delete_rows_by_ids(selected_ids)
             st.success("✅ Selected meals deleted!")
@@ -420,7 +420,7 @@ if st.session_state.food_log:
     
     # Display totals
     st.markdown("#### 📊 Daily Nutrition Totals")
-    col1, col2, col3, col4 = st.columns(4)
+    cols = st.columns(4)
     
     # Calculate target calories (TDEE - deficit)
     target_calories = tdee - calorie_deficit
@@ -428,21 +428,28 @@ if st.session_state.food_log:
     
     # Format the difference string
     if calories_difference > 0:
-        difference_str = f"{calories_difference:.0f} kcal over target"
+        difference_str = f"{calories_difference:.0f} kcal over"
+        difference_caption = f"{calories_difference:.0f} kcal over target"
         difference_color = "inverse"
     else:
-        difference_str = f"{abs(calories_difference):.0f} kcal under target"
+        difference_str = f"{abs(calories_difference):.0f} kcal under"
+        difference_caption = f"{abs(calories_difference):.0f} kcal under target"
         difference_color = "normal"
     
-    with col1:
-        st.metric("Total Calories", f"{total_calories:.0f} kcal", 
-                 difference_str, 
-                 delta_color=difference_color)
-    with col2:
+    # Display metrics in columns with consistent formatting
+    with cols[0]:
+        st.metric(
+            "Total Calories",
+            f"{total_calories:,.0f} kcal",
+            difference_str,
+            delta_color=difference_color
+        )
+        st.caption(difference_caption)
+    with cols[1]:
         st.metric("Total Protein", f"{total_protein:.1f} g")
-    with col3:
+    with cols[2]:
         st.metric("Total Fat", f"{total_fat:.1f} g")
-    with col4:
+    with cols[3]:
         st.metric("Total Carbs", f"{total_carbs:.1f} g")
     
     # Progress bar for daily calories
